@@ -1,4 +1,4 @@
-package main
+package tcpstun
 
 import (
 	"fmt"
@@ -14,7 +14,7 @@ type listener struct {
 }
 
 func (l *listener) Accept() (net.Conn, error) {
-	clientAddr, err := ReadStr(l.stunConn)
+	clientAddr, err := readStr(l.stunConn)
 	if err != nil {
 		// if !strings.Contains(err.Error(), "use of closed network connection") {
 		// 	log.Println("failed to read client address", err)
@@ -25,7 +25,7 @@ func (l *listener) Accept() (net.Conn, error) {
 	for time.Now().Before(end) {
 		conn, err := reuseDial(l.network, l.localAddr, clientAddr)
 		if err != nil {
-			log.Println("failed to accept client", clientAddr, "retrying")
+			// log.Println("failed to accept client", clientAddr, "retrying")
 			continue
 		}
 		return conn, nil
@@ -47,16 +47,15 @@ func Listen(network, stunAddr, localAddr, name string) (net.Listener, error) {
 		log.Println("failed to dial stun server", stunAddr, err)
 		return nil, err
 	}
-	err = WriteByte(stunConn, 1) // I'm server
+	err = writeByte(stunConn, 1) // I'm server
 	if err != nil {
 		log.Println("failed to write type to stun server", stunAddr, err)
 		return nil, err
 	}
-	err = WriteStr(stunConn, name)
+	err = writeStr(stunConn, name)
 	if err != nil {
 		log.Println("failed to write name to stun server", stunAddr, err)
 		return nil, err
 	}
-	log.Println("listening at", localAddr)
 	return &listener{network, localAddr, stunConn}, nil
 }

@@ -1,4 +1,4 @@
-package main
+package tcpstun
 
 import (
 	"fmt"
@@ -30,9 +30,9 @@ func Dial(network, stunAddr, localAddr, remoteName string) (net.Conn, error) {
 	}
 	defer stunConn.Close()
 
-	WriteByte(stunConn, 0) // I'm client
-	WriteStr(stunConn, remoteName)
-	targetAddr, err := ReadStr(stunConn)
+	writeByte(stunConn, 0) // I'm client
+	writeStr(stunConn, remoteName)
+	targetAddr, err := readStr(stunConn)
 	if err != nil {
 		log.Println("failed to dial stun server", stunAddr, err)
 		return nil, err
@@ -41,14 +41,14 @@ func Dial(network, stunAddr, localAddr, remoteName string) (net.Conn, error) {
 		log.Println("remote", remoteName, "not found")
 		return nil, fmt.Errorf("remote %s not found", remoteName)
 	}
-	end := time.Now().Add(10 * time.Second)
+	end := time.Now().Add(15 * time.Second)
 	for time.Now().Before(end) {
 		conn, err := reuseDial(network, localAddr, targetAddr)
 		if err != nil {
-			log.Println("failed to dial target server", targetAddr, "retrying")
+			// log.Println("failed to dial target server", targetAddr, "retrying")
 			continue
 		}
 		return conn, nil
 	}
-	return nil, fmt.Errorf("timeout")
+	return nil, fmt.Errorf("timeout to dial")
 }
