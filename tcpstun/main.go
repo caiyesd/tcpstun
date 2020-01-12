@@ -12,6 +12,8 @@ import (
 	cli "gopkg.in/urfave/cli.v1"
 )
 
+const default_stun_port = "27310"
+
 func main() {
 	log.SetFlags(log.LstdFlags /* | log.Lshortfile*/)
 
@@ -19,7 +21,7 @@ func main() {
 	app.EnableBashCompletion = true
 	app.Name = "tcpstun"
 	app.Version = "1.0.0"
-	app.Usage = "stun | server | client"
+	app.Usage = "stun | nc"
 	app.Description = "A golang implementation of simple tcp stun protocol"
 	app.Commands = []cli.Command{
 		{
@@ -29,49 +31,32 @@ func main() {
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  "local-addr, l",
-					Value: "0.0.0.0:27310",
+					Value: "0.0.0.0:" + default_stun_port,
 					Usage: "local tcp stun address",
 				},
 			},
 		}, {
-			Name:   "server",
-			Usage:  "start a netcat server",
-			Action: startServer,
+			Name:   "nc",
+			Usage:  "simple netcat",
+			Action: startNc,
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  "stun-addr, s",
-					Value: "127.0.0.1:27310",
+					Value: "127.0.0.1:" + default_stun_port,
 					Usage: "local tcp stun address",
+				},
+				cli.BoolFlag{
+					Name:  "client, c",
+					Usage: "client mode",
 				},
 				cli.StringFlag{
 					Name:  "local-addr, l",
-					Value: "0.0.0.0:27311",
+					Value: "0.0.0.0:0",
 					Usage: "local address",
 				},
 				cli.StringFlag{
 					Name:  "name, n",
-					Value: "noname",
-					Usage: "server name",
-				},
-			},
-		}, {
-			Name:   "client",
-			Usage:  "start a netcat client",
-			Action: startClient,
-			Flags: []cli.Flag{
-				cli.StringFlag{
-					Name:  "stun-addr, s",
-					Value: "127.0.0.1:27310",
-					Usage: "local tcp stun address",
-				},
-				cli.StringFlag{
-					Name:  "local-addr, l",
-					Value: "0.0.0.0:27312",
-					Usage: "local address",
-				},
-				cli.StringFlag{
-					Name:  "name, n",
-					Value: "noname",
+					Value: "<noname>",
 					Usage: "server name",
 				},
 			},
@@ -87,6 +72,14 @@ func startStun(c *cli.Context) error {
 	ch := make(chan int)
 	<-ch
 	return nil
+}
+
+func startNc(c *cli.Context) error {
+	if c.Bool("client") {
+		return startClient(c)
+	} else {
+		return startServer(c)
+	}
 }
 
 func startClient(c *cli.Context) error {
@@ -114,7 +107,7 @@ func startServer(c *cli.Context) error {
 		log.Println("failed to listen at", stunAddr, localAddr, err)
 		return err
 	}
-	log.Println("listening at", localAddr)
+	log.Println("listening at", l.Addr().String())
 	defer l.Close()
 
 	conn, err := l.Accept()

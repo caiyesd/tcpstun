@@ -29,6 +29,8 @@ func Dial(network, stunAddr, localAddr, remoteName string) (net.Conn, error) {
 		return nil, err
 	}
 	defer stunConn.Close()
+	log.Println("using local address", stunConn.LocalAddr().String())
+	localAddr = stunConn.LocalAddr().String()
 
 	writeByte(stunConn, 0) // I'm client
 	writeStr(stunConn, remoteName)

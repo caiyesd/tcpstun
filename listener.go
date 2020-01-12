@@ -2,6 +2,7 @@ package tcpstun
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"time"
@@ -16,9 +17,11 @@ type listener struct {
 func (l *listener) Accept() (net.Conn, error) {
 	clientAddr, err := readStr(l.stunConn)
 	if err != nil {
-		// if !strings.Contains(err.Error(), "use of closed network connection") {
-		// 	log.Println("failed to read client address", err)
-		// }
+		if io.EOF == err {
+			log.Println("failed to read client address current name has already been used")
+		} else {
+			log.Println("failed to read client address", err)
+		}
 		return nil, err
 	}
 	end := time.Now().Add(10 * time.Second)
@@ -57,5 +60,5 @@ func Listen(network, stunAddr, localAddr, name string) (net.Listener, error) {
 		log.Println("failed to write name to stun server", stunAddr, err)
 		return nil, err
 	}
-	return &listener{network, localAddr, stunConn}, nil
+	return &listener{network, stunConn.LocalAddr().String(), stunConn}, nil
 }
