@@ -21,4 +21,5 @@ tcpstun/*.dll
 tcpstun/*.so
 tcpstun/*.dylib
 
+releases
 
