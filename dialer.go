@@ -17,7 +17,7 @@ func reuseDial(network, laddr, raddr string) (net.Conn, error) {
 	d := net.Dialer{
 		Control:   reuse.Control,
 		LocalAddr: nla,
-		Timeout:   time.Second * 10,
+		Timeout:   time.Second * 5,
 	}
 	return d.Dial(network, raddr)
 }
@@ -29,8 +29,9 @@ func Dial(network, stunAddr, localAddr, remoteName string) (net.Conn, error) {
 		return nil, err
 	}
 	defer stunConn.Close()
-	log.Println("using local address", stunConn.LocalAddr().String())
+
 	localAddr = stunConn.LocalAddr().String()
+	log.Println("using local address", localAddr)
 
 	writeByte(stunConn, 0) // I'm client
 	writeStr(stunConn, remoteName)
@@ -43,14 +44,48 @@ func Dial(network, stunAddr, localAddr, remoteName string) (net.Conn, error) {
 		log.Println("remote", remoteName, "not found")
 		return nil, fmt.Errorf("remote %s not found", remoteName)
 	}
-	end := time.Now().Add(15 * time.Second)
-	for time.Now().Before(end) {
-		conn, err := reuseDial(network, localAddr, targetAddr)
+
+	log.Println("sleep 3 seconds to wait remote server to connect first")
+	time.Sleep(3 * time.Second)
+
+	log.Println("try to dail server", targetAddr)
+	conn, err := reuseDial(network, localAddr, targetAddr)
+	if err != nil {
+		log.Println("failed to dial server", targetAddr, err)
+		log.Println("try to listen as server at", localAddr)
+
+		l, err := reuse.Listen(network, localAddr)
 		if err != nil {
-			// log.Println("failed to dial target server", targetAddr, "retrying")
-			continue
+			log.Println("failed to listen as server at", localAddr, err)
+			return nil, err
 		}
-		return conn, nil
+		defer l.Close()
+
+		// log.Println("try to accept for 6 seconds")
+		// if l.(*net.TCPListener).SetDeadline(time.Now().Add(6 * time.Second)); err != nil {
+		// 	log.Println("failed to SetDeadline on listener", err)
+		// 	return nil, err
+		// }
+		go func() {
+			time.Sleep(6 * time.Second)
+			conn, _ := net.DialTimeout("tcp4", l.Addr().String(), time.Second*5)
+			if conn != nil {
+				conn.Close()
+			}
+		}()
+		conn, err = l.Accept()
+		if err != nil {
+			log.Println("failed to accept, give up", err)
+			return nil, err
+		} else if conn.RemoteAddr().String() != targetAddr {
+			conn.Close()
+			log.Println("try to dial as client")
+			conn, err = reuseDial(network, stunConn.LocalAddr().String(), targetAddr)
+			if err != nil {
+				log.Println("failed to dial as client, give up", err)
+				return nil, err
+			}
+		}
 	}
-	return nil, fmt.Errorf("timeout to dial")
+	return conn, nil
 }

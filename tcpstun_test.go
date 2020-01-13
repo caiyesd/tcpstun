@@ -7,9 +7,9 @@ import (
 	"time"
 )
 
-const StunAddr = "127.0.0.1:7001"
-const ClientAddr = "127.0.0.1:7002"
-const ServerAddr = "127.0.0.1:7003"
+const StunAddr = "127.0.0.1:8001"
+const ClientAddr = "127.0.0.1:8002"
+const ServerAddr = "127.0.0.1:8003"
 const ServerName = "ABCD"
 
 func TestTrojanProtocol(t *testing.T) {
