@@ -3,6 +3,7 @@ package tcpstun
 import (
 	"fmt"
 	"log"
+	"math/rand"
 	"net"
 	"time"
 
@@ -17,7 +18,7 @@ func reuseDial(network, laddr, raddr string) (net.Conn, error) {
 	d := net.Dialer{
 		Control:   reuse.Control,
 		LocalAddr: nla,
-		Timeout:   time.Second * 10,
+		Timeout:   time.Second * 1,
 	}
 	return d.Dial(network, raddr)
 }
@@ -28,7 +29,7 @@ func Dial(network, stunAddr, localAddr, remoteName string) (net.Conn, error) {
 		log.Println("failed to dail stun server", err)
 		return nil, err
 	}
-	defer stunConn.Close()
+
 	log.Println("using local address", stunConn.LocalAddr().String())
 	localAddr = stunConn.LocalAddr().String()
 
@@ -36,18 +37,24 @@ func Dial(network, stunAddr, localAddr, remoteName string) (net.Conn, error) {
 	writeStr(stunConn, remoteName)
 	targetAddr, err := readStr(stunConn)
 	if err != nil {
-		log.Println("failed to dial stun server", stunAddr, err)
+		log.Println("failed to read stun server", stunAddr, err)
+		stunConn.Close()
 		return nil, err
 	}
 	if targetAddr == "" {
 		log.Println("remote", remoteName, "not found")
+		stunConn.Close()
 		return nil, fmt.Errorf("remote %s not found", remoteName)
+
 	}
-	end := time.Now().Add(15 * time.Second)
+	stunConn.Close()
+
+	end := time.Now().Add(60 * time.Second)
 	for time.Now().Before(end) {
 		conn, err := reuseDial(network, localAddr, targetAddr)
 		if err != nil {
-			// log.Println("failed to dial target server", targetAddr, "retrying")
+			log.Println("failed to dial target server", targetAddr, "retrying")
+			time.Sleep(time.Duration(rand.Intn(100)) * time.Millisecond)
 			continue
 		}
 		return conn, nil

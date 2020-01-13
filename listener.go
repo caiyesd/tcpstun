@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"net"
 	"time"
 )
@@ -24,11 +25,13 @@ func (l *listener) Accept() (net.Conn, error) {
 		}
 		return nil, err
 	}
-	end := time.Now().Add(10 * time.Second)
+	time.Sleep(3 * time.Second)
+	end := time.Now().Add(60 * time.Second)
 	for time.Now().Before(end) {
 		conn, err := reuseDial(l.network, l.localAddr, clientAddr)
 		if err != nil {
-			// log.Println("failed to accept client", clientAddr, "retrying")
+			log.Println("failed to accept client", clientAddr, "retrying")
+			time.Sleep(time.Duration(rand.Intn(100)) * time.Millisecond)
 			continue
 		}
 		return conn, nil

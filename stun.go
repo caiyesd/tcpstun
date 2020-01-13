@@ -95,12 +95,12 @@ func (s *stunServer) handle(conn net.Conn) {
 		isServer = tmp != 0
 	}
 
-	name, err := readStr(conn)
-	if err != nil {
-		log.Println("failed to read name", err)
-		return
-	}
 	if isServer {
+		name, err := readStr(conn)
+		if err != nil {
+			log.Println("failed to read name", err)
+			return
+		}
 		s.lock.Lock()
 		if _, ok := s.conns[name]; ok {
 			s.lock.Unlock()
@@ -121,7 +121,7 @@ func (s *stunServer) handle(conn net.Conn) {
 
 		buffer := make([]byte, 1024)
 		for {
-			_, err := conn.Read(buffer)
+			_, err = conn.Read(buffer)
 			if err != nil {
 				if err != io.EOF {
 					log.Println("server", name, conn.RemoteAddr().String(), err)
@@ -130,16 +130,23 @@ func (s *stunServer) handle(conn net.Conn) {
 			}
 		}
 	} else {
-		target := name
-		s.lock.Lock()
-		if conn2, ok := s.conns[target]; ok {
-			log.Println("client", conn.RemoteAddr().String(), "-->", fmt.Sprintf("%s(%s)", conn2.RemoteAddr().String(), name))
-			writeStr(conn2, conn.RemoteAddr().String())
-			writeStr(conn, conn2.RemoteAddr().String())
-		} else {
-			log.Println("targer server", target, "not found")
-			writeStr(conn, "")
+		for {
+			name, err := readStr(conn)
+			if err != nil {
+				log.Println("failed to read name", err)
+				return
+			}
+			target := name
+			s.lock.Lock()
+			if conn2, ok := s.conns[target]; ok {
+				log.Println("client", conn.RemoteAddr().String(), "-->", fmt.Sprintf("%s(%s)", conn2.RemoteAddr().String(), name))
+				writeStr(conn2, conn.RemoteAddr().String())
+				writeStr(conn, conn2.RemoteAddr().String())
+			} else {
+				log.Println("targer server", target, "not found")
+				writeStr(conn, "")
+			}
+			s.lock.Unlock()
 		}
-		s.lock.Unlock()
 	}
 }
