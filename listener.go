@@ -7,12 +7,13 @@ import (
 	"math/rand"
 	"net"
 	"time"
+
+	reuse "github.com/libp2p/go-reuseport"
 )
 
 type listener struct {
-	network   string
-	localAddr string
-	stunConn  net.Conn
+	network  string
+	stunConn net.Conn
 }
 
 func (l *listener) Accept() (net.Conn, error) {
@@ -25,10 +26,10 @@ func (l *listener) Accept() (net.Conn, error) {
 		}
 		return nil, err
 	}
-	time.Sleep(3 * time.Second)
+
 	end := time.Now().Add(60 * time.Second)
 	for time.Now().Before(end) {
-		conn, err := reuseDial(l.network, l.localAddr, clientAddr)
+		conn, err := reuseDial(l.network, l.stunConn.LocalAddr().String(), clientAddr)
 		if err != nil {
 			log.Println("failed to accept client", clientAddr, "retrying")
 			time.Sleep(time.Duration(rand.Intn(100)) * time.Millisecond)
@@ -48,6 +49,13 @@ func (l *listener) Addr() net.Addr {
 }
 
 func Listen(network, stunAddr, localAddr, name string) (net.Listener, error) {
+	addr, err := reuse.ResolveAddr(network, localAddr)
+	if err != nil {
+		return nil, err
+	}
+	localAddr = addr.String()
+	log.Println("using local address", localAddr)
+
 	stunConn, err := reuseDial(network, localAddr, stunAddr)
 	if err != nil {
 		log.Println("failed to dial stun server", stunAddr, err)
@@ -63,5 +71,5 @@ func Listen(network, stunAddr, localAddr, name string) (net.Listener, error) {
 		log.Println("failed to write name to stun server", stunAddr, err)
 		return nil, err
 	}
-	return &listener{network, stunConn.LocalAddr().String(), stunConn}, nil
+	return &listener{network, stunConn}, nil
 }

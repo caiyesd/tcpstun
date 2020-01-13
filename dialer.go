@@ -24,14 +24,19 @@ func reuseDial(network, laddr, raddr string) (net.Conn, error) {
 }
 
 func Dial(network, stunAddr, localAddr, remoteName string) (net.Conn, error) {
+	addr, err := reuse.ResolveAddr(network, localAddr)
+	if err != nil {
+		return nil, err
+	}
+	localAddr = addr.String()
+	log.Println("using local address", localAddr)
+
 	stunConn, err := reuseDial(network, localAddr, stunAddr)
 	if err != nil {
 		log.Println("failed to dail stun server", err)
 		return nil, err
 	}
-
-	log.Println("using local address", stunConn.LocalAddr().String())
-	localAddr = stunConn.LocalAddr().String()
+	defer stunConn.Close()
 
 	writeByte(stunConn, 0) // I'm client
 	writeStr(stunConn, remoteName)
