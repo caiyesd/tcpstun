@@ -108,7 +108,6 @@ func startServer(c *cli.Context) error {
 		return err
 	}
 	log.Println("listening at", l.Addr().String())
-	defer l.Close()
 
 	conn, err := l.Accept()
 	if err != nil {
@@ -116,6 +115,8 @@ func startServer(c *cli.Context) error {
 		return err
 	}
 	log.Println("accepted remote client", conn.RemoteAddr().String())
+	l.Close()
+
 	defer conn.Close()
 	handleServerConn(conn)
 	return nil
