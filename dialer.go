@@ -17,7 +17,7 @@ func reuseDial(network, laddr, raddr string) (net.Conn, error) {
 	d := net.Dialer{
 		Control:   reuse.Control,
 		LocalAddr: nla,
-		Timeout:   time.Second * 10,
+		Timeout:   time.Second * 5,
 	}
 	return d.Dial(network, raddr)
 }
@@ -29,8 +29,9 @@ func Dial(network, stunAddr, localAddr, remoteName string) (net.Conn, error) {
 		return nil, err
 	}
 	defer stunConn.Close()
-	log.Println("using local address", stunConn.LocalAddr().String())
+
 	localAddr = stunConn.LocalAddr().String()
+	log.Println("using local address", localAddr)
 
 	writeByte(stunConn, 0) // I'm client
 	writeStr(stunConn, remoteName)
@@ -40,17 +41,9 @@ func Dial(network, stunAddr, localAddr, remoteName string) (net.Conn, error) {
 		return nil, err
 	}
 	if targetAddr == "" {
-		log.Println("remote", remoteName, "not found")
-		return nil, fmt.Errorf("remote %s not found", remoteName)
+		log.Println("name", remoteName, "not found")
+		return nil, fmt.Errorf("name %s not found", remoteName)
 	}
-	end := time.Now().Add(15 * time.Second)
-	for time.Now().Before(end) {
-		conn, err := reuseDial(network, localAddr, targetAddr)
-		if err != nil {
-			// log.Println("failed to dial target server", targetAddr, "retrying")
-			continue
-		}
-		return conn, nil
-	}
-	return nil, fmt.Errorf("timeout to dial")
+
+	return connect(network, localAddr, targetAddr)
 }
