@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -20,7 +21,7 @@ func main() {
 	app := cli.NewApp()
 	app.EnableBashCompletion = true
 	app.Name = "tcpstun"
-	app.Version = "1.0.0"
+	app.Version = "1.0.1"
 	app.Usage = "stun | nc"
 	app.Description = "A golang implementation of simple tcp stun protocol"
 	app.Commands = []cli.Command{
@@ -61,6 +62,37 @@ func main() {
 				},
 			},
 		},
+		{
+			Name:   "pm",
+			Usage:  "port mapping client",
+			Action: startPm,
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  "stun-addr, s",
+					Value: "127.0.0.1:" + default_stun_port,
+					Usage: "local tcp stun address",
+				},
+				cli.BoolFlag{
+					Name:  "client, c",
+					Usage: "client mode",
+				},
+				cli.StringFlag{
+					Name:  "local-addr, l",
+					Value: "0.0.0.0:0",
+					Usage: "local address",
+				},
+				cli.StringFlag{
+					Name:  "name, n",
+					Value: "<noname>",
+					Usage: "server name",
+				},
+				cli.IntFlag{
+					Name:  "port, p",
+					Value: 22,
+					Usage: "port",
+				},
+			},
+		},
 	}
 
 	app.RunAndExitOnError()
@@ -76,13 +108,13 @@ func startStun(c *cli.Context) error {
 
 func startNc(c *cli.Context) error {
 	if c.Bool("client") {
-		return startClient(c)
+		return startNcClient(c)
 	} else {
-		return startServer(c)
+		return startNcServer(c)
 	}
 }
 
-func startClient(c *cli.Context) error {
+func startNcClient(c *cli.Context) error {
 	stunAddr := c.String("stun-addr")
 	localAddr := c.String("local-addr")
 	remoteName := c.String("name")
@@ -92,11 +124,11 @@ func startClient(c *cli.Context) error {
 		return err
 	}
 	defer conn.Close()
-	handleClientConn(conn)
+	handleNcClientConn(conn)
 	return nil
 }
 
-func startServer(c *cli.Context) error {
+func startNcServer(c *cli.Context) error {
 	stunAddr := c.String("stun-addr")
 	localAddr := c.String("local-addr")
 	name := c.String("name")
@@ -114,11 +146,11 @@ func startServer(c *cli.Context) error {
 		return err
 	}
 	defer conn.Close()
-	handleServerConn(conn)
+	handleNcServerConn(conn)
 	return nil
 }
 
-func handleClientConn(conn net.Conn) {
+func handleNcClientConn(conn net.Conn) {
 	session, err := mux.Client(conn, nil)
 	if err != nil {
 		log.Println("failed to create mux client session", err)
@@ -158,7 +190,7 @@ func handleClientConn(conn net.Conn) {
 	session.Close()
 }
 
-func handleServerConn(conn net.Conn) {
+func handleNcServerConn(conn net.Conn) {
 	session, err := mux.Server(conn, nil)
 	if err != nil {
 		log.Println("failed to create mux server session", err)
@@ -224,4 +256,105 @@ func ioCopy(dst io.Writer, src io.Reader) (written int64, err error) {
 		}
 	}
 	return written, err
+}
+
+// --------------------------------
+
+func startPm(c *cli.Context) error {
+	if c.Bool("client") {
+		return startPmClient(c)
+	} else {
+		return startPmServer(c)
+	}
+}
+
+func startPmClient(c *cli.Context) error {
+	stunAddr := c.String("stun-addr")
+	localAddr := c.String("local-addr")
+	remoteName := c.String("name")
+	port := c.Int("port")
+
+	l, err := net.Listen("tcp4", fmt.Sprintf("%s:%d", "127.0.0.1", port))
+	if err != nil {
+		return err
+	}
+	log.Println("listening at", fmt.Sprintf("%s:%d", "127.0.0.1", port))
+
+	conn2, err := l.Accept()
+	if err != nil {
+		return err
+	}
+
+	log.Println("a client arrived")
+	defer conn2.Close()
+	conn, err := stun.Dial("tcp4", stunAddr, localAddr, remoteName)
+	if err != nil {
+		return err
+	}
+	log.Println("connected to remote server", conn.RemoteAddr().String())
+	defer conn.Close()
+
+	ch := make(chan int)
+
+	go func() {
+		ioCopy(conn, conn2)
+		ch <- 1
+	}()
+	go func() {
+		ioCopy(conn2, conn)
+		ch <- 1
+	}()
+
+	<-ch
+	return nil
+}
+
+func startPmServer(c *cli.Context) error {
+	stunAddr := c.String("stun-addr")
+	localAddr := c.String("local-addr")
+	name := c.String("name")
+	port := c.Int("port")
+
+	l, err := stun.Listen("tcp4", stunAddr, localAddr, name)
+	if err != nil {
+		log.Println("failed to listen at", stunAddr, localAddr, err)
+		return err
+	}
+	log.Println("listening at stun addr", l.Addr().String())
+	defer l.Close()
+
+	conn, err := l.Accept()
+	if err != nil {
+		log.Println("failed to accept at", localAddr, err)
+		return err
+	}
+	log.Println("accepted remote client", conn.RemoteAddr().String())
+	defer conn.Close()
+	handlePmServerConn(conn, port)
+	return nil
+}
+
+func handlePmServerConn(conn net.Conn, port int) {
+	defer conn.Close()
+	log.Println("connecting to", fmt.Sprintf("%s:%d", "127.0.0.1", port))
+	conn2, err := net.Dial("tcp4", fmt.Sprintf("%s:%d", "127.0.0.1", port))
+	if err != nil {
+		log.Println("failed to connect", fmt.Sprintf("%s:%d", "127.0.0.1", port))
+		return
+	}
+	defer conn2.Close()
+	log.Println("connected to", fmt.Sprintf("%s:%d", "127.0.0.1", port))
+
+	ch := make(chan int)
+
+	go func() {
+		ioCopy(conn, conn2)
+		ch <- 1
+	}()
+	go func() {
+		ioCopy(conn2, conn)
+		ch <- 1
+	}()
+
+	<-ch
 }
